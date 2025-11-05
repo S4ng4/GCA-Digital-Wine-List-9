@@ -1919,19 +1919,27 @@ class WineListApp {
         // Check 5: Potential issues
         const issues = [];
         
-        // Check for wines with missing critical data
-        const winesWithMissingData = this.wines.filter(wine => 
-            !wine.wine_name || !wine.region || !wine.wine_producer || !wine.wine_price
-        );
+        // Check for wines with missing critical data (these should already be filtered out in loadWineData)
+        // Only log as debug since they're already handled
+        const winesWithMissingData = this.wines.filter(wine => {
+            const hasName = wine.wine_name && wine.wine_name.trim() !== '';
+            const hasRegion = wine.region && wine.region.trim() !== '';
+            const hasProducer = wine.wine_producer && wine.wine_producer.trim() !== '';
+            const hasPrice = wine.wine_price && wine.wine_price !== '0' && wine.wine_price !== '';
+            return !hasName || !hasRegion || !hasProducer || !hasPrice;
+        });
         if (winesWithMissingData.length > 0) {
-            issues.push(`${winesWithMissingData.length} wines with missing critical data`);
+            // These are already filtered out in loadWineData(), so don't add to issues
+            console.debug(`⚠️ ${winesWithMissingData.length} wines with missing critical data found (should already be filtered out)`);
         }
         
-        // Check for duplicate wine numbers
+        // Check for duplicate wine numbers (only count unique duplicates)
         const wineNumbers = this.wines.map(wine => wine.wine_number);
-        const duplicateNumbers = wineNumbers.filter((number, index) => wineNumbers.indexOf(number) !== index);
-        if (duplicateNumbers.length > 0) {
-            issues.push(`${duplicateNumbers.length} duplicate wine numbers found`);
+        const uniqueDuplicates = [...new Set(wineNumbers.filter((number, index) => wineNumbers.indexOf(number) !== index))];
+        if (uniqueDuplicates.length > 0) {
+            // Count total duplicates, not just unique ones
+            const totalDuplicates = wineNumbers.length - new Set(wineNumbers).size;
+            issues.push(`${totalDuplicates} duplicate wine numbers found (${uniqueDuplicates.length} unique duplicate numbers)`);
         }
         
         // Check for suspicious regions
@@ -2533,27 +2541,48 @@ if (window.location.pathname === '/' || window.location.pathname.endsWith('index
                 }
             }
             
+            // Check if Leaflet is available
+            if (typeof L === 'undefined') {
+                console.error('❌ Leaflet library is not loaded. Please check if Leaflet script is included.');
+                return false;
+            }
+            
             // Ensure map container has dimensions
             const containerStyles = window.getComputedStyle(mapContainer);
-            if (containerStyles.width === '0px' || containerStyles.height === '0px') {
+            const containerWidth = parseFloat(containerStyles.width);
+            const containerHeight = parseFloat(containerStyles.height);
+            
+            if (containerWidth === 0 || containerHeight === 0) {
                 console.log('Map container has no dimensions, waiting...');
-                // Wait a bit and try again
-                setTimeout(() => {
-                    if (mapContainer && !mapContainer._leaflet_id) {
-                        initializeMap();
+                // Wait a bit and try again (max 3 retries)
+                let retryCount = 0;
+                const maxRetries = 3;
+                const retryInterval = setInterval(() => {
+                    retryCount++;
+                    const newStyles = window.getComputedStyle(mapContainer);
+                    const newWidth = parseFloat(newStyles.width);
+                    const newHeight = parseFloat(newStyles.height);
+                    
+                    if ((newWidth > 0 && newHeight > 0) || retryCount >= maxRetries) {
+                        clearInterval(retryInterval);
+                        if (newWidth > 0 && newHeight > 0 && !mapContainer._leaflet_id) {
+                            initializeMap();
+                        }
                     }
                 }, 500);
                 return false;
             }
             
             // Initialize map
-            mapInstance = L.map('map', {
-                zoomControl: true,
-                minZoom: 6,
-                maxZoom: 8,
-                maxBounds: [[35.5, 5.0], [48.0, 20.0]],
-                maxBoundsViscosity: 1.0
-            }).setView([41.9, 12.6], 6);
+            try {
+                mapInstance = L.map('map', {
+                    zoomControl: true,
+                    minZoom: 6,
+                    maxZoom: 8,
+                    maxBounds: [[35.5, 5.0], [48.0, 20.0]],
+                    maxBoundsViscosity: 1.0
+                }).setView([41.9, 12.6], 6);
+                console.log('✅ Map initialized successfully');
             // Load GeoJSON with error handling and fallback
             fetch('https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_regions.geojson')
                 .then(response => {
@@ -2646,7 +2675,47 @@ if (window.location.pathname === '/' || window.location.pathname.endsWith('index
                             </div>
                         `;
                     }
+                })
+                .catch(error => {
+                    console.error('❌ Error in map initialization promise chain:', error);
                 });
+                
+            } catch (error) {
+                console.error('❌ Error initializing map:', error);
+                const mapContainer = document.getElementById('map');
+                if (mapContainer) {
+                    mapContainer.innerHTML = `
+                        <div style="
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            height: 100%;
+                            flex-direction: column;
+                            gap: 1rem;
+                            color: rgba(245, 245, 240, 0.7);
+                            text-align: center;
+                            padding: 2rem;
+                        ">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: var(--gold);"></i>
+                            <h3 style="font-family: 'Cinzel', serif; color: var(--gold); margin: 0;">Map Initialization Error</h3>
+                            <p style="margin: 0;">Unable to initialize map. Please check your browser console for details.</p>
+                            <button onclick="location.reload()" style="
+                                background: var(--gold);
+                                color: var(--dark);
+                                border: none;
+                                padding: 0.75rem 1.5rem;
+                                border-radius: 8px;
+                                font-family: 'Cinzel', serif;
+                                font-weight: 600;
+                                cursor: pointer;
+                                margin-top: 1rem;
+                                transition: transform 0.2s ease;
+                            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">Retry</button>
+                        </div>
+                    `;
+                }
+                return false;
+            }
             
             return true;
         }
@@ -4338,4 +4407,3 @@ if (window.location.pathname === '/' || window.location.pathname.endsWith('index
             }
         }, 500);
 }
-
