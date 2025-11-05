@@ -2512,35 +2512,40 @@ if (window.location.pathname === '/' || window.location.pathname.endsWith('index
         // Dashboard functionality variables (must be declared before use)
         let currentWineType = null;
         let currentSelectedRegion = null;
-        // Initialize map when DOM is ready
-        document.addEventListener('DOMContentLoaded', function() {
-            // Check URL parameters for region and type
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlRegion = urlParams.get('region');
-            const urlType = urlParams.get('type');
-            
-            // Set current wine type if provided in URL
-            if (urlType) {
-                currentWineType = urlType;
-                // Update map colors for the wine type
-                updateMapColors(urlType);
-                // Activate corresponding wine card
-                document.querySelectorAll('.wine-card-sidebar').forEach(card => {
-                    if (card.dataset.type === urlType) {
-                        card.classList.add('active');
-                    } else {
-                        card.classList.remove('active');
-                    }
-                });
-            }
-            
+        // Initialize map function
+        function initializeMap() {
             const mapContainer = document.getElementById('map');
-            if (!mapContainer) return;
+            if (!mapContainer) return false;
+            
             // Check if map is already initialized
             if (mapContainer._leaflet_id) {
                 console.log('Map already initialized, skipping...');
-                return;
+                return true;
             }
+            
+            // Check if map container is visible and has dimensions
+            const mapWrapper = document.getElementById('mapWrapper');
+            if (mapWrapper) {
+                const wrapperStyles = window.getComputedStyle(mapWrapper);
+                if (wrapperStyles.display === 'none' || wrapperStyles.visibility === 'hidden') {
+                    console.log('Map wrapper is hidden, skipping initialization...');
+                    return false;
+                }
+            }
+            
+            // Ensure map container has dimensions
+            const containerStyles = window.getComputedStyle(mapContainer);
+            if (containerStyles.width === '0px' || containerStyles.height === '0px') {
+                console.log('Map container has no dimensions, waiting...');
+                // Wait a bit and try again
+                setTimeout(() => {
+                    if (mapContainer && !mapContainer._leaflet_id) {
+                        initializeMap();
+                    }
+                }, 500);
+                return false;
+            }
+            
             // Initialize map
             mapInstance = L.map('map', {
                 zoomControl: true,
@@ -2642,7 +2647,36 @@ if (window.location.pathname === '/' || window.location.pathname.endsWith('index
                         `;
                     }
                 });
+            
+            return true;
+        }
+        
+        // Initialize map when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check URL parameters for region and type
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlRegion = urlParams.get('region');
+            const urlType = urlParams.get('type');
+            
+            // Set current wine type if provided in URL
+            if (urlType) {
+                currentWineType = urlType;
+                // Update map colors for the wine type
+                updateMapColors(urlType);
+                // Activate corresponding wine card
+                document.querySelectorAll('.wine-card-sidebar').forEach(card => {
+                    if (card.dataset.type === urlType) {
+                        card.classList.add('active');
+                    } else {
+                        card.classList.remove('active');
+                    }
+                });
+            }
+            
+            // Initialize the map
+            initializeMap();
         });
+        
         // Mobile Menu Management
         let currentMobileView = 'regions';
         let currentMobileWineType = null;
@@ -4304,3 +4338,4 @@ if (window.location.pathname === '/' || window.location.pathname.endsWith('index
             }
         }, 500);
 }
+
