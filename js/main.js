@@ -79,6 +79,17 @@ class WineListApp {
         
         // Test all regions
         this.testAllRegions();
+            // --- aggiungere QUI, subito dopo this.testAllRegions(); ---
+if (typeof window !== 'undefined') {
+    try {
+        window.wineApp = window.wineApp || this;
+        window.dispatchEvent(new Event('wineAppReady'));
+        console.log('main.js: wineAppReady dispatched after loading wine data');
+    } catch (e) {
+        console.warn('main.js: failed to dispatch wineAppReady', e);
+    }
+}
+// --- fine inserimento ---
         } catch (error) {
             console.error('Error loading wine data:', error);
             this.showError(`Failed to load wine data: ${error.message}. Please refresh the page.`);
